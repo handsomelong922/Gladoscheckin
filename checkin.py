@@ -3,6 +3,7 @@ import json
 import os
 import time
 import logging
+import datetime
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -140,7 +141,8 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'points': 0,
             'leftdays': 0,
             'message_status': '未知错误',
-            'check_result': ''
+            'check_result': '',
+            'points_change': 0  # 新增积分变化字段
         }
         
         # 处理签到结果
@@ -150,6 +152,14 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
                 checkin_data = checkin.json()
                 result['check_result'] = checkin_data.get('message', '')
                 result['points'] = checkin_data.get('points', 0)
+                # 尝试提取积分变化
+                if "Checkin! Got" in result['check_result']:
+                    # 尝试从 "Checkin! Got 1 points." 这样的消息中提取数字
+                    try:
+                        points_str = result['check_result'].split("Got ")[1].split(" points")[0]
+                        result['points_change'] = int(points_str)
+                    except (IndexError, ValueError):
+                        result['points_change'] = 0
                 logger.info(f"签到响应: {result['check_result']}")
             except json.JSONDecodeError as e:
                 logger.error(f"签到响应JSON解析失败: {e}")
@@ -180,7 +190,7 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
         if result['checkin_success']:
             check_result = result['check_result']
             if "Checkin! Got" in check_result:
-                result['message_status'] = "签到成功，会员点数 + " + str(result['points'])
+                result['message_status'] = "签到成功，会员点数 + " + str(result['points_change'])
                 return result, 'success'
             elif "Checkin Repeats!" in check_result:
                 result['message_status'] = "重复签到，明天再来"
@@ -201,7 +211,8 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'points': 0,
             'leftdays': 0,
             'message_status': '请求超时',
-            'check_result': str(e)
+            'check_result': str(e),
+            'points_change': 0
         }, 'fail'
     except requests.exceptions.ConnectionError as e:
         logger.error(f"连接错误: {e}")
@@ -212,7 +223,8 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'points': 0,
             'leftdays': 0,
             'message_status': '连接失败',
-            'check_result': str(e)
+            'check_result': str(e),
+            'points_change': 0
         }, 'fail'
     except Exception as e:
         logger.error(f"签到过程中出现未知错误: {e}")
@@ -223,7 +235,8 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'points': 0,
             'leftdays': 0,
             'message_status': f'未知错误: {str(e)}',
-            'check_result': str(e)
+            'check_result': str(e),
+            'points_change': 0
         }, 'fail'
 
 # -------------------------------------------------------------------------------------------
@@ -270,6 +283,8 @@ if __name__ == '__main__':
             'token': 'glados.one'
         }
         
+        account_results = []  # 存储每个账号的结果
+        
         for i, cookie in enumerate(cookies):
             logger.info(f"处理第 {i+1}/{len(cookies)} 个账号")
             
@@ -285,17 +300,8 @@ if __name__ == '__main__':
             else:
                 fail += 1
             
-            # 构建上下文
-            email = result['email']
-            points = result['points']
-            leftdays = result['leftdays']
-            
-            if leftdays > 0:
-                message_days = f"{leftdays} 天"
-            else:
-                message_days = "error"
-            
-            context += f"账号: {email}, P: {points}, 剩余: {message_days} | "
+            # 存储结果
+            account_results.append(result)
             
             print(result['check_result'])
             
@@ -305,6 +311,35 @@ if __name__ == '__main__':
             # 避免请求过于频繁
             if i < len(cookies) - 1:
                 time.sleep(1)
+
+        # 格式化通知内容
+        for i, result in enumerate(account_results):
+            # 获取当前时间
+            now = datetime.datetime.now()
+            time_str = now.strftime("%Y/%m/%d %H:%M:%S")
+            
+            # 构建美化的通知内容
+            account_context = f"--- 账号 {i+1} 签到结果 ---\n"
+            
+            if result['checkin_success']:
+                points_change_str = f"+{result['points_change']}" if result['points_change'] > 0 else "0"
+                account_context += f"积分变化: {points_change_str}\n"
+                account_context += f"当前余额: {result['points']}\n"
+            else:
+                account_context += f"签到结果: {result['message_status']}\n"
+                
+            if result['status_success']:
+                account_context += f"剩余天数: {result['leftdays']}天\n"
+            else:
+                account_context += "剩余天数: 获取失败\n"
+                
+            account_context += f"签到时间: {time_str}\n"
+            
+            # 添加分隔符
+            if i < len(account_results) - 1:
+                account_context += "\n"
+                
+            context += account_context
 
         # 推送内容 
         if len(cookies) > 1:
