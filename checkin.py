@@ -151,16 +151,21 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             try:
                 checkin_data = checkin.json()
                 result['check_result'] = checkin_data.get('message', '')
-                result['points'] = checkin_data.get('points', 0)
-                # 尝试提取积分变化
+                result['points'] = checkin_data.get('points', 0)  # 当前总积分
+                
+                # 提取积分变化
                 if "Checkin! Got" in result['check_result']:
-                    # 尝试从 "Checkin! Got 1 points." 这样的消息中提取数字
+                    # 从 "Checkin! Got 1 points." 这样的消息中提取数字
                     try:
                         points_str = result['check_result'].split("Got ")[1].split(" points")[0]
                         result['points_change'] = int(points_str)
                     except (IndexError, ValueError):
-                        result['points_change'] = 0
+                        # 如果无法从消息中提取，默认为1点
+                        result['points_change'] = 1
+                
                 logger.info(f"签到响应: {result['check_result']}")
+                logger.info(f"当前积分: {result['points']}, 积分变化: +{result['points_change']}")
+                
             except json.JSONDecodeError as e:
                 logger.error(f"签到响应JSON解析失败: {e}")
                 result['check_result'] = f"JSON解析失败: {checkin.text[:100]}"
@@ -194,6 +199,8 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
                 return result, 'success'
             elif "Checkin Repeats!" in check_result:
                 result['message_status'] = "重复签到，明天再来"
+                # 重复签到没有积分变化
+                result['points_change'] = 0
                 return result, 'repeat'
             else:
                 result['message_status'] = "签到失败，请检查..."
@@ -322,10 +329,20 @@ if __name__ == '__main__':
             account_context = f"--- 账号 {i+1} 签到结果 ---\n"
             
             if result['checkin_success']:
-                points_change_str = f"+{result['points_change']}" if result['points_change'] > 0 else "0"
-                account_context += f"积分变化: {points_change_str}\n"
-                account_context += f"当前余额: {result['points']}\n"
+                if "Checkin! Got" in result['check_result']:
+                    # 成功签到
+                    account_context += f"积分变化: +{result['points_change']}\n"
+                    account_context += f"当前余额: {result['points']}\n"
+                elif "Checkin Repeats!" in result['check_result']:
+                    # 重复签到
+                    account_context += "积分变化: +0 (重复签到)\n"
+                    account_context += f"当前余额: {result['points']}\n"
+                else:
+                    # 其他情况
+                    account_context += f"签到结果: {result['message_status']}\n"
+                    account_context += f"当前余额: {result['points']}\n"
             else:
+                # 签到失败
                 account_context += f"签到结果: {result['message_status']}\n"
                 
             if result['status_success']:
