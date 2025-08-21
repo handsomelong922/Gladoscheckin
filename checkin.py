@@ -145,52 +145,34 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'points_change': 0
         }
         
-        # 处理状态查询结果（先获取当前积分）
-        if state.status_code == 200:
-            result['status_success'] = True
-            try:
-                state_data = state.json()
-                data = state_data.get('data', {})
-                result['leftdays'] = int(float(data.get('leftDays', 0)))
-                result['email'] = data.get('email', 'unknown')
-                # 从状态接口获取当前积分
-                result['points'] = int(float(data.get('points', 0)))
-                logger.info(f"账号: {result['email']}, 当前积分: {result['points']}, 剩余天数: {result['leftdays']}")
-            except (json.JSONDecodeError, ValueError, TypeError) as e:
-                logger.error(f"状态响应解析失败: {e}")
-                result['email'] = 'parse_error'
-                result['leftdays'] = 0
-                result['points'] = 0
-        else:
-            logger.error(f"状态查询失败，状态码: {state.status_code}")
-            result['email'] = 'status_error'
-            result['leftdays'] = 0
-            result['points'] = 0
-        
-        # 处理签到结果
+        # 先处理签到结果，从中获取准确的积分信息
         if checkin.status_code == 200:
             result['checkin_success'] = True
             try:
                 checkin_data = checkin.json()
                 result['check_result'] = checkin_data.get('message', '')
                 
-                # 提取积分变化
-                if "Checkin! Got" in result['check_result']:
-                    # 从 "Checkin! Got 1 points." 这样的消息中提取数字
-                    try:
-                        points_str = result['check_result'].split("Got ")[1].split(" points")[0]
-                        result['points_change'] = int(points_str)
-                    except (IndexError, ValueError):
-                        # 如果无法从消息中提取，默认为1点
-                        result['points_change'] = 1
-                elif "Checkin Repeats!" in result['check_result']:
-                    # 重复签到时，积分变化为0
-                    result['points_change'] = 0
+                # 从签到响应的list数组中获取积分信息（参考n8n工作流）
+                checkin_list = checkin_data.get('list', [])
+                if checkin_list and len(checkin_list) > 0:
+                    # 获取积分变化和当前余额
+                    result['points_change'] = int(float(checkin_list[0].get('change', 0)))
+                    result['points'] = int(float(checkin_list[0].get('balance', 0)))
+                    logger.info(f"从签到响应获取 - 积分变化: +{result['points_change']}, 当前余额: {result['points']}")
                 else:
-                    result['points_change'] = 0
+                    # 备用方案：从消息中解析积分变化
+                    if "Checkin! Got" in result['check_result']:
+                        try:
+                            points_str = result['check_result'].split("Got ")[1].split(" points")[0]
+                            result['points_change'] = int(points_str)
+                        except (IndexError, ValueError):
+                            result['points_change'] = 1
+                    elif "Checkin Repeats!" in result['check_result']:
+                        result['points_change'] = 0
+                    else:
+                        result['points_change'] = 0
                 
                 logger.info(f"签到响应: {result['check_result']}")
-                logger.info(f"积分变化: +{result['points_change']}")
                 
             except json.JSONDecodeError as e:
                 logger.error(f"签到响应JSON解析失败: {e}")
@@ -198,6 +180,29 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
         else:
             logger.error(f"签到请求失败，状态码: {checkin.status_code}")
             result['check_result'] = f"签到请求失败，状态码: {checkin.status_code}"
+        
+        # 处理状态查询结果（获取剩余天数等信息）
+        if state.status_code == 200:
+            result['status_success'] = True
+            try:
+                state_data = state.json()
+                data = state_data.get('data', {})
+                result['leftdays'] = int(float(data.get('leftDays', 0)))
+                result['email'] = data.get('email', 'unknown')
+                
+                # 如果签到响应没有提供积分信息，则从状态接口获取
+                if result['points'] == 0:
+                    result['points'] = int(float(data.get('points', 0)))
+                
+                logger.info(f"账号: {result['email']}, 剩余天数: {result['leftdays']}")
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.error(f"状态响应解析失败: {e}")
+                result['email'] = 'parse_error'
+                result['leftdays'] = 0
+        else:
+            logger.error(f"状态查询失败，状态码: {state.status_code}")
+            result['email'] = 'status_error'
+            result['leftdays'] = 0
         
         # 判断签到结果
         if result['checkin_success']:
@@ -285,19 +290,23 @@ if __name__ == '__main__':
     if cookies:
         logger.info(f"找到 {len(cookies)} 个cookie")
 
-        check_in_url = "https://glados.space/api/user/checkin"        # 签到地址
-        status_url = "https://glados.space/api/user/status"          # 查看账户状态
+        # 尝试不同的API端点
+        api_endpoints = [
+            {
+                'checkin': 'https://glados.rocks/api/user/checkin',
+                'status': 'https://glados.rocks/api/user/status',
+                'referer': 'https://glados.rocks/console/checkin',
+                'origin': 'https://glados.rocks'
+            },
+            {
+                'checkin': 'https://glados.space/api/user/checkin',
+                'status': 'https://glados.space/api/user/status',
+                'referer': 'https://glados.space/console/checkin',
+                'origin': 'https://glados.space'
+            }
+        ]
 
-        referer = 'https://glados.space/console/checkin'
-        origin = "https://glados.space"
-        useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36"
-        
-        headers_template = {
-            'referer': referer,
-            'origin': origin,
-            'user-agent': useragent,
-            'content-type': 'application/json;charset=UTF-8'
-        }
+        useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         
         payload = {
             'token': 'glados.one'
@@ -308,9 +317,45 @@ if __name__ == '__main__':
         for i, cookie in enumerate(cookies):
             logger.info(f"处理第 {i+1}/{len(cookies)} 个账号")
             
-            result, status = perform_glados_checkin(
-                cookie, check_in_url, status_url, headers_template, payload
-            )
+            # 尝试不同的API端点
+            result = None
+            for endpoint in api_endpoints:
+                try:
+                    headers_template = {
+                        'Accept': 'application/json, text/plain, */*',
+                        'referer': endpoint['referer'],
+                        'origin': endpoint['origin'],
+                        'user-agent': useragent,
+                        'content-type': 'application/json;charset=UTF-8'
+                    }
+                    
+                    logger.info(f"尝试使用API端点: {endpoint['checkin']}")
+                    result, status = perform_glados_checkin(
+                        cookie, endpoint['checkin'], endpoint['status'], headers_template, payload
+                    )
+                    
+                    # 如果成功获取到数据，跳出循环
+                    if result['checkin_success'] or result['status_success']:
+                        logger.info(f"成功使用API端点: {endpoint['checkin']}")
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"API端点 {endpoint['checkin']} 失败: {e}")
+                    continue
+            
+            if result is None:
+                # 所有端点都失败了
+                result = {
+                    'checkin_success': False,
+                    'status_success': False,
+                    'email': 'all_endpoints_failed',
+                    'points': 0,
+                    'leftdays': 0,
+                    'message_status': '所有API端点都失败',
+                    'check_result': '所有API端点都失败',
+                    'points_change': 0
+                }
+                status = 'fail'
             
             # 统计结果
             if status == 'success':
