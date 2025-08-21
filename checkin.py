@@ -4,6 +4,7 @@ import os
 import time
 import logging
 import datetime
+import pytz
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -142,8 +143,30 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'leftdays': 0,
             'message_status': '未知错误',
             'check_result': '',
-            'points_change': 0  # 新增积分变化字段
+            'points_change': 0
         }
+        
+        # 处理状态查询结果（先获取当前积分）
+        if state.status_code == 200:
+            result['status_success'] = True
+            try:
+                state_data = state.json()
+                data = state_data.get('data', {})
+                result['leftdays'] = int(float(data.get('leftDays', 0)))
+                result['email'] = data.get('email', 'unknown')
+                # 从状态接口获取当前积分
+                result['points'] = int(float(data.get('points', 0)))
+                logger.info(f"账号: {result['email']}, 当前积分: {result['points']}, 剩余天数: {result['leftdays']}")
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.error(f"状态响应解析失败: {e}")
+                result['email'] = 'parse_error'
+                result['leftdays'] = 0
+                result['points'] = 0
+        else:
+            logger.error(f"状态查询失败，状态码: {state.status_code}")
+            result['email'] = 'status_error'
+            result['leftdays'] = 0
+            result['points'] = 0
         
         # 处理签到结果
         if checkin.status_code == 200:
@@ -151,7 +174,6 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             try:
                 checkin_data = checkin.json()
                 result['check_result'] = checkin_data.get('message', '')
-                result['points'] = checkin_data.get('points', 0)  # 当前总积分
                 
                 # 提取积分变化
                 if "Checkin! Got" in result['check_result']:
@@ -162,9 +184,14 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
                     except (IndexError, ValueError):
                         # 如果无法从消息中提取，默认为1点
                         result['points_change'] = 1
+                elif "Checkin Repeats!" in result['check_result']:
+                    # 重复签到时，积分变化为0
+                    result['points_change'] = 0
+                else:
+                    result['points_change'] = 0
                 
                 logger.info(f"签到响应: {result['check_result']}")
-                logger.info(f"当前积分: {result['points']}, 积分变化: +{result['points_change']}")
+                logger.info(f"积分变化: +{result['points_change']}")
                 
             except json.JSONDecodeError as e:
                 logger.error(f"签到响应JSON解析失败: {e}")
@@ -172,24 +199,6 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
         else:
             logger.error(f"签到请求失败，状态码: {checkin.status_code}")
             result['check_result'] = f"签到请求失败，状态码: {checkin.status_code}"
-        
-        # 处理状态查询结果
-        if state.status_code == 200:
-            result['status_success'] = True
-            try:
-                state_data = state.json()
-                data = state_data.get('data', {})
-                result['leftdays'] = int(float(data.get('leftDays', 0)))
-                result['email'] = data.get('email', 'unknown')
-                logger.info(f"账号: {result['email']}, 剩余天数: {result['leftdays']}")
-            except (json.JSONDecodeError, ValueError, TypeError) as e:
-                logger.error(f"状态响应解析失败: {e}")
-                result['email'] = 'parse_error'
-                result['leftdays'] = 0
-        else:
-            logger.error(f"状态查询失败，状态码: {state.status_code}")
-            result['email'] = 'status_error'
-            result['leftdays'] = 0
         
         # 判断签到结果
         if result['checkin_success']:
@@ -199,8 +208,6 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
                 return result, 'success'
             elif "Checkin Repeats!" in check_result:
                 result['message_status'] = "重复签到，明天再来"
-                # 重复签到没有积分变化
-                result['points_change'] = 0
                 return result, 'repeat'
             else:
                 result['message_status'] = "签到失败，请检查..."
@@ -245,6 +252,22 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'check_result': str(e),
             'points_change': 0
         }, 'fail'
+
+def get_beijing_time():
+    """获取北京时间"""
+    try:
+        # 创建北京时区
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+        # 获取UTC时间
+        utc_now = datetime.datetime.utcnow()
+        # 转换为北京时间
+        beijing_time = utc_now.replace(tzinfo=pytz.UTC).astimezone(beijing_tz)
+        return beijing_time.strftime("%Y/%m/%d %H:%M:%S")
+    except:
+        # 如果pytz不可用，简单地加8小时
+        utc_now = datetime.datetime.utcnow()
+        beijing_time = utc_now + datetime.timedelta(hours=8)
+        return beijing_time.strftime("%Y/%m/%d %H:%M:%S")
 
 # -------------------------------------------------------------------------------------------
 # github workflows
@@ -321,9 +344,8 @@ if __name__ == '__main__':
 
         # 格式化通知内容
         for i, result in enumerate(account_results):
-            # 获取当前时间
-            now = datetime.datetime.now()
-            time_str = now.strftime("%Y/%m/%d %H:%M:%S")
+            # 获取北京时间
+            time_str = get_beijing_time()
             
             # 构建美化的通知内容
             account_context = f"--- 账号 {i+1} 签到结果 ---\n"
@@ -334,8 +356,8 @@ if __name__ == '__main__':
                     account_context += f"积分变化: +{result['points_change']}\n"
                     account_context += f"当前余额: {result['points']}\n"
                 elif "Checkin Repeats!" in result['check_result']:
-                    # 重复签到
-                    account_context += "积分变化: +0 (重复签到)\n"
+                    # 重复签到 - 显示实际的积分变化为0，但显示当前余额
+                    account_context += f"积分变化: +{result['points_change']} (重复签到)\n"
                     account_context += f"当前余额: {result['points']}\n"
                 else:
                     # 其他情况
@@ -344,6 +366,8 @@ if __name__ == '__main__':
             else:
                 # 签到失败
                 account_context += f"签到结果: {result['message_status']}\n"
+                if result['status_success']:
+                    account_context += f"当前余额: {result['points']}\n"
                 
             if result['status_success']:
                 account_context += f"剩余天数: {result['leftdays']}天\n"
