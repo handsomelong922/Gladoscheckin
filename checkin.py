@@ -4,7 +4,6 @@ import os
 import time
 import logging
 import datetime
-import pytz
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -254,20 +253,11 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
         }, 'fail'
 
 def get_beijing_time():
-    """获取北京时间"""
-    try:
-        # 创建北京时区
-        beijing_tz = pytz.timezone('Asia/Shanghai')
-        # 获取UTC时间
-        utc_now = datetime.datetime.utcnow()
-        # 转换为北京时间
-        beijing_time = utc_now.replace(tzinfo=pytz.UTC).astimezone(beijing_tz)
-        return beijing_time.strftime("%Y/%m/%d %H:%M:%S")
-    except:
-        # 如果pytz不可用，简单地加8小时
-        utc_now = datetime.datetime.utcnow()
-        beijing_time = utc_now + datetime.timedelta(hours=8)
-        return beijing_time.strftime("%Y/%m/%d %H:%M:%S")
+    """获取北京时间（UTC+8）"""
+    # 获取UTC时间并加8小时转换为北京时间
+    utc_now = datetime.datetime.utcnow()
+    beijing_time = utc_now + datetime.timedelta(hours=8)
+    return beijing_time.strftime("%Y/%m/%d %H:%M:%S")
 
 # -------------------------------------------------------------------------------------------
 # github workflows
