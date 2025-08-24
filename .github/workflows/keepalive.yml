@@ -1,0 +1,21 @@
+name: Keep repository active
+
+on:
+  schedule:
+    # 每月运行一次，例如每月1日运行
+    - cron: '0 0 1 * *'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Create empty commit
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git commit --allow-empty -m "chore: 保持仓库活跃状态"
+          git push
