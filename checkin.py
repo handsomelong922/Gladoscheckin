@@ -293,6 +293,12 @@ if __name__ == '__main__':
         # 尝试不同的API端点
         api_endpoints = [
             {
+                'checkin': 'https://glados.cloud/api/user/checkin',
+                'status': 'https://glados.cloud/api/user/status',
+                'referer': 'https://glados.cloud/console/checkin',
+                'origin': 'https://glados.cloud'
+            },
+            {
                 'checkin': 'https://glados.rocks/api/user/checkin',
                 'status': 'https://glados.rocks/api/user/status',
                 'referer': 'https://glados.rocks/console/checkin',
@@ -303,12 +309,6 @@ if __name__ == '__main__':
                 'status': 'https://glados.space/api/user/status',
                 'referer': 'https://glados.space/console/checkin',
                 'origin': 'https://glados.space'
-            },
-            {
-               'checkin': 'https://glados.cloud/api/user/checkin',
-                'status': 'https://glados.cloud/api/user/status',
-                'referer': 'https://glados.cloud/console/checkin',
-                'origin': 'https://glados.cloud'
             }
         ]
 
@@ -340,10 +340,22 @@ if __name__ == '__main__':
                         cookie, endpoint['checkin'], endpoint['status'], headers_template, payload
                     )
                     
-                    # 如果成功获取到数据，跳出循环
-                    if result['checkin_success'] or result['status_success']:
-                        logger.info(f"成功使用API端点: {endpoint['checkin']}")
-                        break
+                    # 改进判断逻辑：只有真正签到成功才认为成功
+                    if result['checkin_success']:
+                        check_msg = result.get('check_result', '')
+                        # 检查是否真正签到成功或重复签到
+                        if "Checkin! Got" in check_msg or "Checkin Repeats!" in check_msg:
+                            logger.info(f"签到成功，使用API端点: {endpoint['checkin']}")
+                            break
+                        elif "please checkin via" in check_msg:
+                            logger.warning(f"API端点 {endpoint['checkin']} 要求使用其他域名，继续尝试下一个端点")
+                            continue
+                        else:
+                            logger.warning(f"API端点 {endpoint['checkin']} 签到失败: {check_msg}，继续尝试下一个端点")
+                            continue
+                    else:
+                        logger.warning(f"API端点 {endpoint['checkin']} 请求失败，继续尝试下一个端点")
+                        continue
                         
                 except Exception as e:
                     logger.error(f"API端点 {endpoint['checkin']} 失败: {e}")
