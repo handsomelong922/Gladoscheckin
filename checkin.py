@@ -293,16 +293,22 @@ if __name__ == '__main__':
         # 尝试不同的API端点
         api_endpoints = [
             {
-                'checkin': 'https://glados.rocks/api/user/checkin',
-                'status': 'https://glados.rocks/api/user/status',
-                'referer': 'https://glados.rocks/console/checkin',
-                'origin': 'https://glados.rocks'
+                'checkin': 'https://glados.cloud/api/user/checkin',
+                'status': 'https://glados.cloud/api/user/status',
+                'referer': 'https://glados.cloud/console/checkin',
+                'origin': 'https://glados.cloud'
             },
             {
                 'checkin': 'https://glados.space/api/user/checkin',
                 'status': 'https://glados.space/api/user/status',
                 'referer': 'https://glados.space/console/checkin',
                 'origin': 'https://glados.space'
+            },
+            {
+                'checkin': 'https://glados.rocks/api/user/checkin',
+                'status': 'https://glados.rocks/api/user/status',
+                'referer': 'https://glados.rocks/console/checkin',
+                'origin': 'https://glados.rocks'
             }
         ]
 
@@ -447,3 +453,4 @@ if __name__ == '__main__':
             print(f"通知发送异常: {e}")
 
     logger.info("脚本执行完成")
+
