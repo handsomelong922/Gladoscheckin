@@ -43,8 +43,8 @@ def send_wechat(token, title, msg):
     }
     
     template = 'html'
-    url = f"https://www.pushplus.plus/send?token={token}&title={title}&content={msg}&template={template}"
-    logger.info(f"发送通知URL: {url[:80]}...")
+    url = f"https://www.pushplus.plus/send? token={token}&title={title}&content={msg}&template={template}"
+    logger.info(f"发送通知URL: {url[: 80]}...")
     print(url)
     
     # 主URL尝试
@@ -55,11 +55,11 @@ def send_wechat(token, title, msg):
             logger.info(f"通知发送状态码: {r.status_code}")
             
             if r.status_code == 200:
-                logger.info("通知发送成功")
+                logger.info("通知发送成��")
                 print(r.text)
-                return r.text
+                return r. text
             else:
-                logger.warning(f"通知发送返回状态码: {r.status_code}")
+                logger.warning(f"通知发送返回状态码: {r. status_code}")
                 print(f"Response: {r.text}")
                 
         except requests.exceptions.SSLError as e:
@@ -69,7 +69,7 @@ def send_wechat(token, title, msg):
                 continue
                 
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"连接错误 (第{attempt + 1}次): {e}")
+            logger. error(f"连接错误 (第{attempt + 1}次): {e}")
             if attempt < 2:
                 time.sleep(2 ** attempt)
                 continue
@@ -89,12 +89,12 @@ def send_wechat(token, title, msg):
     # 尝试备用域名
     backup_urls = [
         f"https://pushplus.hxtrip.com/send?token={token}&title={title}&content={msg}&template={template}",
-        f"http://www.pushplus.plus/send?token={token}&title={title}&content={msg}&template={template}"
+        f"http://www.pushplus.plus/send? token={token}&title={title}&content={msg}&template={template}"
     ]
     
-    for backup_url in backup_urls:
+    for backup_url in backup_urls: 
         try:
-            logger.info(f"尝试备用URL: {backup_url[:80]}...")
+            logger. info(f"尝试备用URL: {backup_url[:80]}...")
             r = session.get(url=backup_url, timeout=20, headers=headers)
             if r.status_code == 200:
                 logger.info("使用备用URL发送通知成功")
@@ -136,11 +136,11 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
         
         result = {
             'checkin_success': False,
-            'status_success': False,
+            'status_success':  False,
             'email': '',
             'points': 0,
             'leftdays': 0,
-            'message_status': '未知错误',
+            'message_status':  '未知错误',
             'check_result': '',
             'points_change': 0
         }
@@ -156,10 +156,10 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
                 checkin_list = checkin_data.get('list', [])
                 if checkin_list and len(checkin_list) > 0:
                     # 获取积分变化和当前余额
-                    result['points_change'] = int(float(checkin_list[0].get('change', 0)))
+                    result['points_change'] = int(float(checkin_list[0]. get('change', 0)))
                     result['points'] = int(float(checkin_list[0].get('balance', 0)))
                     logger.info(f"从签到响应获取 - 积分变化: +{result['points_change']}, 当前余额: {result['points']}")
-                else:
+                else: 
                     # 备用方案：从消息中解析积分变化
                     if "Checkin! Got" in result['check_result']:
                         try:
@@ -169,20 +169,20 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
                             result['points_change'] = 1
                     elif "Checkin Repeats!" in result['check_result']:
                         result['points_change'] = 0
-                    else:
+                    else: 
                         result['points_change'] = 0
                 
-                logger.info(f"签到响应: {result['check_result']}")
+                logger.info(f"签到响应:  {result['check_result']}")
                 
             except json.JSONDecodeError as e:
                 logger.error(f"签到响应JSON解析失败: {e}")
-                result['check_result'] = f"JSON解析失败: {checkin.text[:100]}"
+                result['check_result'] = f"JSON解析失败: {checkin.text[: 100]}"
         else:
-            logger.error(f"签到请求失败，状态码: {checkin.status_code}")
-            result['check_result'] = f"签到请求失败，状态码: {checkin.status_code}"
+            logger.error(f"签到请求失败，状态码: {checkin. status_code}")
+            result['check_result'] = f"签到请求失败，状态码: {checkin. status_code}"
         
         # 处理状态查询结果（获取剩余天数等信息）
-        if state.status_code == 200:
+        if state. status_code == 200:
             result['status_success'] = True
             try:
                 state_data = state.json()
@@ -194,13 +194,13 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
                 if result['points'] == 0:
                     result['points'] = int(float(data.get('points', 0)))
                 
-                logger.info(f"账号: {result['email']}, 剩余天数: {result['leftdays']}")
+                logger.info(f"账号:  {result['email']}, 剩余天数: {result['leftdays']}")
             except (json.JSONDecodeError, ValueError, TypeError) as e:
-                logger.error(f"状态响应解析失败: {e}")
+                logger. error(f"状态响应解析失败: {e}")
                 result['email'] = 'parse_error'
                 result['leftdays'] = 0
         else:
-            logger.error(f"状态查询失败，状态码: {state.status_code}")
+            logger. error(f"状态查询失败，状态码:  {state.status_code}")
             result['email'] = 'status_error'
             result['leftdays'] = 0
         
@@ -220,19 +220,19 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             result['message_status'] = "签到请求失败, 请检查..."
             return result, 'fail'
             
-    except requests.exceptions.Timeout as e:
-        logger.error(f"请求超时: {e}")
+    except requests.exceptions. Timeout as e:
+        logger. error(f"请求超时: {e}")
         return {
-            'checkin_success': False,
+            'checkin_success':  False,
             'status_success': False,
-            'email': 'timeout_error',
+            'email':  'timeout_error',
             'points': 0,
             'leftdays': 0,
             'message_status': '请求超时',
             'check_result': str(e),
             'points_change': 0
         }, 'fail'
-    except requests.exceptions.ConnectionError as e:
+    except requests. exceptions.ConnectionError as e:
         logger.error(f"连接错误: {e}")
         return {
             'checkin_success': False,
@@ -252,7 +252,7 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'email': 'unknown_error',
             'points': 0,
             'leftdays': 0,
-            'message_status': f'未知错误: {str(e)}',
+            'message_status':  f'未知错误: {str(e)}',
             'check_result': str(e),
             'points_change': 0
         }, 'fail'
@@ -261,8 +261,8 @@ def get_beijing_time():
     """获取北京时间（UTC+8）"""
     # 获取UTC时间并加8小时转换为北京时间
     utc_now = datetime.datetime.utcnow()
-    beijing_time = utc_now + datetime.timedelta(hours=8)
-    return beijing_time.strftime("%Y/%m/%d %H:%M:%S")
+    beijing_time = utc_now + datetime. timedelta(hours=8)
+    return beijing_time. strftime("%Y/%m/%d %H:%M:%S")
 
 # -------------------------------------------------------------------------------------------
 # github workflows
@@ -270,12 +270,12 @@ def get_beijing_time():
 if __name__ == '__main__':
     logger.info("开始执行Glados签到脚本")
     
-    # pushdeer key 申请地址 https://www.pushdeer.com/product.html
+    # pushdeer key 申请地址 https://www.pushdeer.com/product. html
     sckey = os.environ.get("SENDKEY", "")
 
     # 推送内容
     title = ""
-    success, fail, repeats = 0, 0, 0        # 成功账号数量 失败账号数量 重复签到账号数量
+    success, fail, repeats = 0, 0, 0        # 成功账号数量 ��败账号数量 重复签到账号数量
     context = ""
 
     # glados账号cookie 直接使用数组 如果使用环境变量需要字符串分割一下
@@ -283,25 +283,25 @@ if __name__ == '__main__':
     if cookies_env:
         cookies = cookies_env.split("&")
         # 过滤空字符串
-        cookies = [cookie.strip() for cookie in cookies if cookie.strip()]
+        cookies = [cookie. strip() for cookie in cookies if cookie.strip()]
     else:
         cookies = []
 
     if cookies:
         logger.info(f"找到 {len(cookies)} 个cookie")
 
-        # 只使用 glados.cloud 端点（其他端点已失效）
+        # 只使用 glados.cloud 端点
         api_endpoints = [
             {
-                'checkin': 'https://glados.cloud/api/user/checkin',
+                'checkin':  'https://glados.cloud/api/user/checkin',
                 'status': 'https://glados.cloud/api/user/status',
-                'referer': 'https://glados.cloud/console/checkin',
                 'origin': 'https://glados.cloud'
             }
         ]
 
         useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0"
         
+        # 修复：token 改为 glados.cloud
         payload = {
             'token': 'glados.cloud'
         }
@@ -311,10 +311,11 @@ if __name__ == '__main__':
         for i, cookie in enumerate(cookies):
             logger.info(f"处理第 {i+1}/{len(cookies)} 个账号")
             
-            # 尝试不同的API端点
+            # 尝试API端点
             result = None
             for endpoint in api_endpoints:
-                try:
+                try: 
+                    # 修复：移除 referer 请求头
                     headers_template = {
                         'Accept': 'application/json, text/plain, */*',
                         'Content-Type': 'application/json;charset=UTF-8',
@@ -327,38 +328,33 @@ if __name__ == '__main__':
                         cookie, endpoint['checkin'], endpoint['status'], headers_template, payload
                     )
                     
-                    # 改进判断逻辑：只有真正签到成功才认为成功
+                    # 判断签到是否成功
                     if result['checkin_success']:
-                        check_msg = result.get('check_result', '')
-                        # 检查是否真正签到成功或重复签到
+                        check_msg = result. get('check_result', '')
                         if "Checkin! Got" in check_msg or "Checkin Repeats!" in check_msg:
-                            logger.info(f"签到成功，使用API端点: {endpoint['checkin']}")
+                            logger.info(f"✅ 签到成功，使用API端点: {endpoint['checkin']}")
                             break
-                        elif "please checkin via" in check_msg:
-                            logger.warning(f"API端点 {endpoint['checkin']} 要求使用其他域名，继续尝试下一个端点")
-                            continue
                         else:
-                            logger.warning(f"API端点 {endpoint['checkin']} 签到失败: {check_msg}，继续尝试下一个端点")
+                            logger.warning(f"⚠️ 签到返回异常:  {check_msg}")
                             continue
                     else:
-                        logger.warning(f"API端点 {endpoint['checkin']} 请求失败，继续尝试下一个端点")
+                        logger.warning(f"⚠️ 签到失败")
                         continue
                         
                 except Exception as e:
-                    logger.error(f"API端点 {endpoint['checkin']} 失败: {e}")
+                    logger.error(f"❌ API端点异常: {e}")
                     continue
             
             if result is None:
-                # 所有端点都失败了
                 result = {
                     'checkin_success': False,
                     'status_success': False,
-                    'email': 'all_endpoints_failed',
+                    'email': 'all_failed',
                     'points': 0,
-                    'leftdays': 0,
-                    'message_status': '所有API端点都失败',
-                    'check_result': '所有API端点都失败',
-                    'points_change': 0
+                    'leftdays':  0,
+                    'message_status': '签到失败',
+                    'check_result': '签到失败',
+                    'points_change':  0
                 }
                 status = 'fail'
             
@@ -390,20 +386,20 @@ if __name__ == '__main__':
             # 构建美化的通知内容
             account_context = f"--- 账号 {i+1} 签到结果 ---\n"
             
-            if result['checkin_success']:
+            if result['checkin_success']: 
                 if "Checkin! Got" in result['check_result']:
                     # 成功签到
                     account_context += f"积分变化: +{result['points_change']}\n"
                     account_context += f"当前余额: {result['points']}\n"
-                elif "Checkin Repeats!" in result['check_result']:
-                    # 重复签到 - 显示实际的积分变化为0，但显示当前余额
+                elif "Checkin Repeats!" in result['check_result']: 
+                    # 重复签到
                     account_context += f"积分变化: +{result['points_change']} (重复签到)\n"
                     account_context += f"当前余额: {result['points']}\n"
                 else:
                     # 其他情况
                     account_context += f"签到结果: {result['message_status']}\n"
                     account_context += f"当前余额: {result['points']}\n"
-            else:
+            else: 
                 # 签到失败
                 account_context += f"签到结果: {result['message_status']}\n"
                 if result['status_success']:
@@ -411,7 +407,7 @@ if __name__ == '__main__':
                 
             if result['status_success']:
                 account_context += f"剩余天数: {result['leftdays']}天\n"
-            else:
+            else: 
                 account_context += "剩余天数: 获取失败\n"
                 
             account_context += f"签到时间: {time_str}\n"
@@ -422,27 +418,26 @@ if __name__ == '__main__':
                 
             context += account_context
 
-        # 推送内容 
+        # 推送内容
         if len(cookies) > 1:
             title = f'Glados签到完成, 成功{success},失败{fail},重复{repeats}'
         
-        logger.info(f"签到完成: 成功{success}, 失败{fail}, 重复{repeats}")
+        logger.info(f"签到完成:  成功{success}, 失败{fail}, 重复{repeats}")
         print("Send Content:" + "\n", context)
         
     else:
-        # 推送内容 
+        # 推送内容
         title = '# 未找到 cookies!'
         context = '请检查COOKIES环境变量是否正确设置'
         logger.error("未找到有效的cookies")
 
-    print("sckey:", sckey[:10] + "..." if len(sckey) > 10 else sckey)
+    print("sckey:", sckey[: 10] + "..." if len(sckey) > 10 else sckey)
     print("cookies:", [cookie[:20] + "..." if len(cookie) > 20 else cookie for cookie in cookies])
     
     # 推送消息
-    # 未设置 sckey 则不进行推送
     if not sckey:
         print("Not push")
-        logger.info("未设置SENDKEY，跳过推送")
+        logger.info("未设置SENDKEY，���过推送")
     else:
         logger.info("开始发送通知")
         try:
@@ -452,5 +447,3 @@ if __name__ == '__main__':
             print(f"通知发送异常: {e}")
 
     logger.info("脚本执行完成")
-
-
