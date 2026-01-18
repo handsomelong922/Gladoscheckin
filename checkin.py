@@ -290,32 +290,20 @@ if __name__ == '__main__':
     if cookies:
         logger.info(f"找到 {len(cookies)} 个cookie")
 
-        # 尝试不同的API端点
+        # 只使用 glados.cloud 端点（其他端点已失效）
         api_endpoints = [
             {
                 'checkin': 'https://glados.cloud/api/user/checkin',
                 'status': 'https://glados.cloud/api/user/status',
                 'referer': 'https://glados.cloud/console/checkin',
                 'origin': 'https://glados.cloud'
-            },
-            {
-                'checkin': 'https://glados.rocks/api/user/checkin',
-                'status': 'https://glados.rocks/api/user/status',
-                'referer': 'https://glados.rocks/console/checkin',
-                'origin': 'https://glados.rocks'
-            },
-            {
-                'checkin': 'https://glados.space/api/user/checkin',
-                'status': 'https://glados.space/api/user/status',
-                'referer': 'https://glados.space/console/checkin',
-                'origin': 'https://glados.space'
             }
         ]
 
-        useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0"
         
         payload = {
-            'token': 'glados.one'
+            'token': 'glados.cloud'
         }
         
         account_results = []  # 存储每个账号的结果
@@ -329,10 +317,9 @@ if __name__ == '__main__':
                 try:
                     headers_template = {
                         'Accept': 'application/json, text/plain, */*',
-                        'referer': endpoint['referer'],
-                        'origin': endpoint['origin'],
-                        'user-agent': useragent,
-                        'content-type': 'application/json;charset=UTF-8'
+                        'Content-Type': 'application/json;charset=UTF-8',
+                        'Origin': endpoint['origin'],
+                        'User-Agent': useragent
                     }
                     
                     logger.info(f"尝试使用API端点: {endpoint['checkin']}")
