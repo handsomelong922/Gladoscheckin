@@ -52,12 +52,12 @@ def send_wechat(token, title, msg):
         try:
             logger.info(f"尝试发送通知 (第{attempt + 1}次)")
             r = session.get(url=url, timeout=30, headers=headers, verify=True)
-            logger.info(f"通知发送状态码: {r. status_code}")
+            logger.info(f"通知发送状态码: {r.status_code}")
             
             if r.status_code == 200:
                 logger.info("通知发送成功")
                 print(r.text)
-                return r.text
+                return r. text
             else:
                 logger.warning(f"通知发送返回状态码: {r. status_code}")
                 print(f"Response: {r.text}")
@@ -89,12 +89,12 @@ def send_wechat(token, title, msg):
     # 尝试备用域名
     backup_urls = [
         f"https://pushplus.hxtrip.com/send?token={token}&title={title}&content={msg}&template={template}",
-        f"http://www.pushplus.plus/send?token={token}&title={title}&content={msg}&template={template}"
+        f"http://www.pushplus.plus/send? token={token}&title={title}&content={msg}&template={template}"
     ]
     
-    for backup_url in backup_urls:
+    for backup_url in backup_urls: 
         try:
-            logger.info(f"尝试备用URL: {backup_url[:80]}...")
+            logger. info(f"尝试备用URL: {backup_url[:80]}...")
             r = session.get(url=backup_url, timeout=20, headers=headers)
             if r.status_code == 200:
                 logger.info("使用备用URL发送通知成功")
@@ -107,7 +107,7 @@ def send_wechat(token, title, msg):
             continue
     
     logger.error("所有通知发送方式都失败了")
-    print("通知发送失败，但签到程序已完成")
+    print("通知发送失败，但签���程序已完成")
     return None
 
 def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, payload):
@@ -130,7 +130,7 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
         logger.info("获取账号状态...")
         state = requests.get(
             status_url, 
-            headers={k: v for k, v in headers.items() if k != 'content-type'},
+            headers={k:  v for k, v in headers. items() if k != 'content-type'},
             timeout=30
         )
         
@@ -140,7 +140,7 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'email': '',
             'points': 0,
             'leftdays': 0,
-            'message_status': '未知错误',
+            'message_status':  '未知错误',
             'check_result': '',
             'points_change': 0
         }
@@ -148,47 +148,47 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
         # 先处理签到结果，从中获取准确的积分信息
         if checkin.status_code == 200:
             result['checkin_success'] = True
-            try:
+            try: 
                 checkin_data = checkin.json()
                 result['check_result'] = checkin_data.get('message', '')
                 
                 # 从签到响应的list数组中获取积分信息
-                checkin_list = checkin_data.get('list', [])
+                checkin_list = checkin_data. get('list', [])
                 if checkin_list and len(checkin_list) > 0:
                     # 检查是否重复签到
-                    if "Checkin Repeats!" in result['check_result']:
+                    if "Checkin Repeats!" in result['check_result']: 
                         # 重复签到，积分变化为0
                         result['points_change'] = 0
                     else:
                         # 成功签到，获取积分变化
-                        result['points_change'] = int(float(checkin_list[0].get('change', 0)))
+                        result['points_change'] = int(float(checkin_list[0]. get('change', 0)))
                     # 获取当前余额
-                    result['points'] = int(float(checkin_list[0]. get('balance', 0)))
+                    result['points'] = int(float(checkin_list[0].get('balance', 0)))
                     logger.info(f"从签到响应获取 - 积分变化: +{result['points_change']}, 当前余额: {result['points']}")
                 else: 
                     # 备用方案：从消息中解析积分变化
-                    if "Checkin!  Got" in result['check_result']:
+                    if "Checkin" in result['check_result'] and "Got" in result['check_result']: 
                         try:
-                            points_str = result['check_result'].split("Got ")[1].split(" points")[0]
+                            points_str = result['check_result'].split("Got ")[1].split(" ")[0]
                             result['points_change'] = int(points_str)
                         except (IndexError, ValueError):
                             result['points_change'] = 1
-                    elif "Checkin Repeats!" in result['check_result']:
+                    elif "Checkin Repeats!" in result['check_result']: 
                         result['points_change'] = 0
-                    else:
+                    else: 
                         result['points_change'] = 0
                 
                 logger.info(f"签到响应:  {result['check_result']}")
                 
             except json.JSONDecodeError as e:
-                logger.error(f"签到响应JSON解析失败: {e}")
-                result['check_result'] = f"JSON解析失败: {checkin.text[: 100]}"
-        else:
-            logger.error(f"签到请求失败，状态码: {checkin. status_code}")
-            result['check_result'] = f"签到请求失败，状态码: {checkin.status_code}"
+                logger.error(f"签到响应JSON解析失败:  {e}")
+                result['check_result'] = f"JSON解析失败: {checkin. text[: 100]}"
+        else: 
+            logger.error(f"签到请求失败，状态码: {checkin.status_code}")
+            result['check_result'] = f"签到请求失败，状态码:  {checkin.status_code}"
         
         # 处理状态查询结果（获取剩余天数等信息）
-        if state. status_code == 200:
+        if state.status_code == 200:
             result['status_success'] = True
             try:
                 state_data = state.json()
@@ -200,57 +200,66 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
                 if result['points'] == 0:
                     result['points'] = int(float(data.get('points', 0)))
                 
-                logger.info(f"账号:  {result['email']}, 剩余天数: {result['leftdays']}")
-            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.info(f"账号: {result['email']}, 剩余天数: {result['leftdays']}")
+            except (json. JSONDecodeError, ValueError, TypeError) as e:
                 logger. error(f"状态响应解析失败: {e}")
                 result['email'] = 'parse_error'
                 result['leftdays'] = 0
         else:
-            logger. error(f"状态查询失败，状态码:  {state.status_code}")
+            logger.error(f"状态查询失败，状态码: {state.status_code}")
             result['email'] = 'status_error'
             result['leftdays'] = 0
         
-        # 判断签到结果
-        if result['checkin_success']:
+        # 判断签到结果（改进版：优先看积分变化）
+        if result['checkin_success']: 
             check_result = result['check_result']
-            if "Checkin!  Got" in check_result: 
+            
+            # 优先判断：如果积分有变化，就是签到成功
+            if result['points_change'] > 0:
                 result['message_status'] = "签到成功，会员点数 + " + str(result['points_change'])
                 return result, 'success'
-            elif "Checkin Repeats!" in check_result:
+            # 判断重复签到（积分为0或明确提示重复）
+            elif "Checkin Repeats!" in check_result or result['points_change'] == 0:
                 result['message_status'] = "重复签到，明天再来"
                 return result, 'repeat'
-            else:
-                result['message_status'] = "签到失败，请检查..."
+            # 兜底：检查消息文本（宽松匹配）
+            elif "Checkin" in check_result and ("Got" in check_result or "success" in check_result. lower()):
+                result['message_status'] = "签到成功，会员点数 + " + str(result['points_change'])
+                return result, 'success'
+            else: 
+                # 真正失败的情况
+                result['message_status'] = "签到状态未知: " + check_result[:50]
+                logger.warning(f"签到状态未知，返回消息: {check_result}")
                 return result, 'fail'
         else:
             result['message_status'] = "签到请求失败, 请检查..."
             return result, 'fail'
             
-    except requests.exceptions. Timeout as e:
-        logger. error(f"请求超时: {e}")
+    except requests.exceptions.Timeout as e:
+        logger.error(f"请求超时: {e}")
         return {
             'checkin_success': False,
-            'status_success':  False,
+            'status_success': False,
             'email': 'timeout_error',
             'points': 0,
-            'leftdays':  0,
-            'message_status': '请求超时',
+            'leftdays': 0,
+            'message_status':  '请求超时',
             'check_result': str(e),
-            'points_change': 0
+            'points_change':  0
         }, 'fail'
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions. ConnectionError as e:
         logger.error(f"连接错误: {e}")
         return {
             'checkin_success': False,
             'status_success': False,
             'email': 'connection_error',
             'points': 0,
-            'leftdays':  0,
+            'leftdays': 0,
             'message_status': '连接失败',
             'check_result': str(e),
             'points_change': 0
         }, 'fail'
-    except Exception as e:
+    except Exception as e: 
         logger.error(f"签到过程中出现未知错误: {e}")
         return {
             'checkin_success': False,
@@ -258,7 +267,7 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'email': 'unknown_error',
             'points': 0,
             'leftdays': 0,
-            'message_status': f'未知错误: {str(e)}',
+            'message_status':  f'未知错误: {str(e)}',
             'check_result': str(e),
             'points_change': 0
         }, 'fail'
@@ -296,7 +305,7 @@ if __name__ == '__main__':
     if cookies:
         logger.info(f"找到 {len(cookies)} 个cookie")
 
-        # 只使用 glados. cloud 端点
+        # 只使用 glados.cloud 端点
         api_endpoints = [
             {
                 'checkin':  'https://glados.cloud/api/user/checkin',
@@ -307,7 +316,7 @@ if __name__ == '__main__':
 
         useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0"
         
-        # 修复：token 改为 glados.cloud
+        # Token 改为 glados.cloud
         payload = {
             'token': 'glados.cloud'
         }
@@ -321,7 +330,7 @@ if __name__ == '__main__':
             result = None
             for endpoint in api_endpoints:
                 try:
-                    # 修复：移除 referer 请求头
+                    # 移除 referer 请求头
                     headers_template = {
                         'Accept': 'application/json, text/plain, */*',
                         'Content-Type': 'application/json;charset=UTF-8',
@@ -337,13 +346,13 @@ if __name__ == '__main__':
                     # 判断签到是否成功
                     if result['checkin_success']:
                         check_msg = result. get('check_result', '')
-                        if "Checkin!  Got" in check_msg or "Checkin Repeats!" in check_msg:
+                        if "Checkin" in check_msg or result['points_change'] >= 0:
                             logger.info(f"✅ 签到成功，使用API端点: {endpoint['checkin']}")
                             break
                         else:
-                            logger.warning(f"⚠️ 签到返回异常: {check_msg}")
+                            logger.warning(f"⚠️ 签到返回异常:  {check_msg}")
                             continue
-                    else: 
+                    else:
                         logger.warning(f"⚠️ 签到失败")
                         continue
                         
@@ -359,8 +368,8 @@ if __name__ == '__main__':
                     'points': 0,
                     'leftdays': 0,
                     'message_status': '签到失败',
-                    'check_result':  '签到失败',
-                    'points_change':  0
+                    'check_result': '签到失败',
+                    'points_change': 0
                 }
                 status = 'fail'
             
@@ -393,7 +402,7 @@ if __name__ == '__main__':
             account_context = f"--- 账号 {i+1} 签到结果 ---\n"
             
             if result['checkin_success']: 
-                if "Checkin! Got" in result['check_result']:
+                if result['points_change'] > 0:
                     # 成功签到
                     account_context += f"积分变化: +{result['points_change']}\n"
                     account_context += f"当前余额: {result['points']}\n"
@@ -407,13 +416,13 @@ if __name__ == '__main__':
                     account_context += f"当前余额: {result['points']}\n"
             else: 
                 # 签到失败
-                account_context += f"签到结果: {result['message_status']}\n"
+                account_context += f"签到结果:  {result['message_status']}\n"
                 if result['status_success']:
                     account_context += f"当前余额: {result['points']}\n"
                 
             if result['status_success']:
                 account_context += f"剩余天数: {result['leftdays']}天\n"
-            else:
+            else: 
                 account_context += "剩余天数: 获取失败\n"
                 
             account_context += f"签到时间: {time_str}\n"
@@ -428,7 +437,7 @@ if __name__ == '__main__':
         if len(cookies) > 1:
             title = f'Glados签到完成, 成功{success},失败{fail},重复{repeats}'
         
-        logger.info(f"签到完成:  成功{success}, 失败{fail}, 重复{repeats}")
+        logger.info(f"签到完成: 成功{success}, 失败{fail}, 重复{repeats}")
         print("Send Content:" + "\n", context)
         
     else:
