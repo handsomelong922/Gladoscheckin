@@ -1,11 +1,10 @@
-import requests
 import json
-import os
-import time
 import logging
+import os
+import sys
+import time
 import datetime
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+import requests
 
 # 配置日志
 logging.basicConfig(
@@ -15,226 +14,158 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def send_wechat(token, title, msg):
-    """发送微信通知，添加重试机制和错误处理"""
+    """Send a PushPlus notification without exposing its token in the URL."""
     if not token:
         logger.warning("SENDKEY未设置，跳过通知发送")
         return None
-        
-    # 配置重试策略
-    retry_strategy = Retry(
-        total=3,
-        backoff_factor=2,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["GET", "HEAD", "TRACE", "OPTIONS"]
-    )
-    
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session = requests.Session()
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    
-    # 设置请求头
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection':  'keep-alive',
+
+    payload = {
+        "token": token,
+        "title": title,
+        "content": msg,
+        "template": "html",
     }
-    
-    template = 'html'
-    url = f"https://www.pushplus.plus/send?token={token}&title={title}&content={msg}&template={template}"
-    logger.info(f"发送通知URL: {url[: 80]}...")
-    print(url)
-    
-    # 主URL尝试
     for attempt in range(3):
         try:
-            logger.info(f"尝试发送通知 (第{attempt + 1}次)")
-            r = session.get(url=url, timeout=30, headers=headers, verify=True)
-            logger.info(f"通知发送状态码: {r.status_code}")
-            
-            if r.status_code == 200:
-                logger.info("通知发送成功")
-                print(r.text)
-                return r. text
-            else:
-                logger.warning(f"通知发送返回状态码: {r. status_code}")
-                print(f"Response: {r.text}")
-                
-        except requests.exceptions.SSLError as e:
-            logger.error(f"SSL错误 (第{attempt + 1}次): {e}")
-            if attempt < 2:
-                time.sleep(2 ** attempt)
-                continue
-                
-        except requests.exceptions.ConnectionError as e:
-            logger. error(f"连接错误 (第{attempt + 1}次): {e}")
-            if attempt < 2:
-                time.sleep(2 ** attempt)
-                continue
-                
-        except requests.exceptions.Timeout as e:
-            logger.error(f"请求超时 (第{attempt + 1}次): {e}")
-            if attempt < 2:
-                time.sleep(2 ** attempt)
-                continue
-                
-        except Exception as e:
-            logger.error(f"其他错误 (第{attempt + 1}次): {e}")
-            if attempt < 2:
-                time.sleep(2 ** attempt)
-                continue
-    
-    # 尝试备用域名
-    backup_urls = [
-        f"https://pushplus.hxtrip.com/send?token={token}&title={title}&content={msg}&template={template}",
-        f"http://www.pushplus.plus/send? token={token}&title={title}&content={msg}&template={template}"
-    ]
-    
-    for backup_url in backup_urls: 
-        try:
-            logger. info(f"尝试备用URL: {backup_url[:80]}...")
-            r = session.get(url=backup_url, timeout=20, headers=headers)
-            if r.status_code == 200:
-                logger.info("使用备用URL发送通知成功")
-                print(r. text)
-                return r.text
-            else:
-                print(f"Backup URL Response: {r.text}")
-        except Exception as e:
-            logger.error(f"备用URL失败: {e}")
-            continue
-    
+            response = requests.post(
+                "https://www.pushplus.plus/send",
+                json=payload,
+                timeout=30,
+            )
+            logger.info("通知发送状态码: %s", response.status_code)
+            if response.status_code == 200:
+                try:
+                    response_data = response.json()
+                except ValueError:
+                    response_data = {}
+                if isinstance(response_data, dict) and response_data.get("code") == 200:
+                    logger.info("通知发送成功")
+                    return response.text
+                logger.warning(
+                    "通知服务返回失败: %s",
+                    response_data.get("msg", "无法识别的响应"),
+                )
+                return None
+            logger.warning("通知发送返回状态码: %s", response.status_code)
+        except requests.exceptions.RequestException as error:
+            logger.error("通知发送失败 (第%s次): %s", attempt + 1, error)
+        if attempt < 2:
+            time.sleep(2 ** attempt)
+
     logger.error("所有通知发送方式都失败了")
-    print("通知发送失败，但签���程序已完成")
     return None
+
+
+def classify_checkin_response(checkin_data):
+    """Classify a GLaDOS response by its message, not its HTTP status alone."""
+    message = checkin_data.get("message", "")
+    if not isinstance(message, str):
+        message = str(message)
+    message = message.casefold()
+
+    if any(marker in message for marker in (
+        "没有权限", "无权限", "unauthorized", "permission denied", "forbidden"
+    )):
+        return "fail"
+    if "checkin repeats!" in message or "重复签到" in message:
+        return "repeat"
+    if "checkin! got" in message:
+        return "success"
+    return "fail"
 
 def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, payload):
     """执行单个账号的签到操作"""
     try:
-        # 准备请求头
         headers = headers_template.copy()
         headers['cookie'] = cookie
-        
-        # 执行签到
+
         logger.info("开始执行签到...")
         checkin = requests.post(
-            check_in_url, 
-            headers=headers, 
-            data=json.dumps(payload),
-            timeout=30
+            check_in_url,
+            headers=headers,
+            json=payload,
+            timeout=30,
         )
-        
-        # 获取账号状态
+
         logger.info("获取账号状态...")
         state = requests.get(
-            status_url, 
-            headers={k:  v for k, v in headers. items() if k != 'content-type'},
-            timeout=30
+            status_url,
+            headers={key: value for key, value in headers.items()
+                     if key.lower() != "content-type"},
+            timeout=30,
         )
-        
+
         result = {
-            'checkin_success': False,
-            'status_success':  False,
-            'email': '',
-            'points': 0,
-            'leftdays': 0,
-            'message_status':  '未知错误',
-            'check_result': '',
-            'points_change': 0
+            "checkin_success": False,
+            "status_success": False,
+            "email": "",
+            "points": 0,
+            "leftdays": 0,
+            "message_status": "未知错误",
+            "check_result": "",
+            "points_change": 0,
         }
-        
-        # 先处理签到结果，从中获取准确的积分信息
+
+        checkin_status = "fail"
         if checkin.status_code == 200:
-            result['checkin_success'] = True
-            try: 
+            try:
                 checkin_data = checkin.json()
-                result['check_result'] = checkin_data.get('message', '')
-                
-                # 从签到响应的list数组中获取积分信息
-                checkin_list = checkin_data. get('list', [])
-                if checkin_list and len(checkin_list) > 0:
-                    # 检查是否重复签到
-                    if "Checkin Repeats!" in result['check_result']: 
-                        # 重复签到，积分变化为0
-                        result['points_change'] = 0
-                    else:
-                        # 成功签到，获取积分变化
-                        result['points_change'] = int(float(checkin_list[0]. get('change', 0)))
-                    # 获取当前余额
-                    result['points'] = int(float(checkin_list[0].get('balance', 0)))
-                    logger.info(f"从签到响应获取 - 积分变化: +{result['points_change']}, 当前余额: {result['points']}")
-                else: 
-                    # 备用方案：从消息中解析积分变化
-                    if "Checkin" in result['check_result'] and "Got" in result['check_result']: 
-                        try:
-                            points_str = result['check_result'].split("Got ")[1].split(" ")[0]
-                            result['points_change'] = int(points_str)
-                        except (IndexError, ValueError):
-                            result['points_change'] = 1
-                    elif "Checkin Repeats!" in result['check_result']: 
-                        result['points_change'] = 0
-                    else: 
-                        result['points_change'] = 0
-                
-                logger.info(f"签到响应:  {result['check_result']}")
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"签到响应JSON解析失败:  {e}")
-                result['check_result'] = f"JSON解析失败: {checkin. text[: 100]}"
-        else: 
+                if not isinstance(checkin_data, dict):
+                    raise ValueError("签到响应不是JSON对象")
+                result["check_result"] = str(checkin_data.get("message", ""))
+                checkin_status = classify_checkin_response(checkin_data)
+
+                entries = checkin_data.get("list", [])
+                if entries and isinstance(entries[0], dict):
+                    result["points_change"] = int(float(entries[0].get("change", 0)))
+                    result["points"] = int(float(entries[0].get("balance", 0)))
+                elif checkin_status == "success":
+                    try:
+                        result["points_change"] = int(
+                            result["check_result"].split("Got ", 1)[1].split(" ", 1)[0]
+                        )
+                    except (IndexError, ValueError):
+                        result["points_change"] = 1
+                logger.info("签到响应: %s", result["check_result"])
+            except (json.JSONDecodeError, ValueError, TypeError, IndexError) as error:
+                logger.error("签到响应解析失败: %s", error)
+                result["check_result"] = f"签到响应解析失败: {checkin.text[:100]}"
+        else:
             logger.error(f"签到请求失败，状态码: {checkin.status_code}")
-            result['check_result'] = f"签到请求失败，状态码:  {checkin.status_code}"
-        
-        # 处理状态查询结果（获取剩余天数等信息）
+            result["check_result"] = f"签到请求失败，状态码: {checkin.status_code}"
+
         if state.status_code == 200:
-            result['status_success'] = True
             try:
                 state_data = state.json()
-                data = state_data.get('data', {})
-                result['leftdays'] = int(float(data.get('leftDays', 0)))
-                result['email'] = data.get('email', 'unknown')
-                
-                # 如果签到响应没有提供积分信息，则从状态接口获取
-                if result['points'] == 0:
-                    result['points'] = int(float(data.get('points', 0)))
-                
-                logger.info(f"账号: {result['email']}, 剩余天数: {result['leftdays']}")
-            except (json. JSONDecodeError, ValueError, TypeError) as e:
-                logger. error(f"状态响应解析失败: {e}")
-                result['email'] = 'parse_error'
-                result['leftdays'] = 0
+                data = state_data.get("data", {})
+                if not isinstance(data, dict):
+                    raise ValueError("状态响应 data 字段无效")
+                result["leftdays"] = int(float(data.get("leftDays", 0)))
+                result["email"] = data.get("email", "unknown")
+                if result["points"] == 0:
+                    result["points"] = int(float(data.get("points", 0)))
+                result["status_success"] = True
+                logger.info("账号: %s, 剩余天数: %s", result["email"], result["leftdays"])
+            except (json.JSONDecodeError, ValueError, TypeError) as error:
+                logger.error("状态响应解析失败: %s", error)
+                result["email"] = "parse_error"
         else:
             logger.error(f"状态查询失败，状态码: {state.status_code}")
-            result['email'] = 'status_error'
-            result['leftdays'] = 0
-        
-        # 判断签到结果（改进版：优先看积分变化）
-        if result['checkin_success']: 
-            check_result = result['check_result']
-            
-            # 优先判断：如果积分有变化，就是签到成功
-            if result['points_change'] > 0:
-                result['message_status'] = "签到成功，会员点数 + " + str(result['points_change'])
-                return result, 'success'
-            # 判断重复签到（积分为0或明确提示重复）
-            elif "Checkin Repeats!" in check_result or result['points_change'] == 0:
-                result['message_status'] = "重复签到，明天再来"
-                return result, 'repeat'
-            # 兜底：检查消息文本（宽松匹配）
-            elif "Checkin" in check_result and ("Got" in check_result or "success" in check_result. lower()):
-                result['message_status'] = "签到成功，会员点数 + " + str(result['points_change'])
-                return result, 'success'
-            else: 
-                # 真正失败的情况
-                result['message_status'] = "签到状态未知: " + check_result[:50]
-                logger.warning(f"签到状态未知，返回消息: {check_result}")
-                return result, 'fail'
+            result["email"] = "status_error"
+
+        result["checkin_success"] = checkin_status in ("success", "repeat")
+        if checkin_status == "success":
+            result["message_status"] = (
+                "签到成功，会员点数 + " + str(result["points_change"])
+            )
+        elif checkin_status == "repeat":
+            result["message_status"] = "重复签到，明天再来"
         else:
-            result['message_status'] = "签到请求失败, 请检查..."
-            return result, 'fail'
-            
+            detail = result["check_result"] or "签到响应无法识别"
+            result["message_status"] = "签到失败: " + detail[:50]
+            logger.warning("签到未成功: %s", detail)
+        return result, checkin_status
+
     except requests.exceptions.Timeout as e:
         logger.error(f"请求超时: {e}")
         return {
@@ -243,11 +174,11 @@ def perform_glados_checkin(cookie, check_in_url, status_url, headers_template, p
             'email': 'timeout_error',
             'points': 0,
             'leftdays': 0,
-            'message_status':  '请求超时',
+            'message_status': '请求超时',
             'check_result': str(e),
-            'points_change':  0
+            'points_change': 0
         }, 'fail'
-    except requests.exceptions. ConnectionError as e:
+    except requests.exceptions.ConnectionError as e:
         logger.error(f"连接错误: {e}")
         return {
             'checkin_success': False,
@@ -343,18 +274,10 @@ if __name__ == '__main__':
                         cookie, endpoint['checkin'], endpoint['status'], headers_template, payload
                     )
                     
-                    # 判断签到是否成功
-                    if result['checkin_success']:
-                        check_msg = result. get('check_result', '')
-                        if "Checkin" in check_msg or result['points_change'] >= 0:
-                            logger.info(f"✅ 签到成功，使用API端点: {endpoint['checkin']}")
-                            break
-                        else:
-                            logger.warning(f"⚠️ 签到返回异常:  {check_msg}")
-                            continue
-                    else:
-                        logger.warning(f"⚠️ 签到失败")
-                        continue
+                    if status in ('success', 'repeat'):
+                        logger.info(f"签到完成，使用API端点: {endpoint['checkin']}")
+                        break
+                    logger.warning(f"签到端点返回失败: {result['check_result']}")
                         
                 except Exception as e: 
                     logger.error(f"❌ API端点异常: {e}")
@@ -446,9 +369,6 @@ if __name__ == '__main__':
         context = '请检查COOKIES环境变量是否正确设置'
         logger.error("未找到有效的cookies")
 
-    print("sckey:", sckey[: 10] + "..." if len(sckey) > 10 else sckey)
-    print("cookies:", [cookie[:20] + "..." if len(cookie) > 20 else cookie for cookie in cookies])
-    
     # 推送消息
     if not sckey:
         print("Not push")
@@ -462,3 +382,5 @@ if __name__ == '__main__':
             print(f"通知发送异常: {e}")
 
     logger.info("脚本执行完成")
+    if fail or not cookies:
+        sys.exit(1)
